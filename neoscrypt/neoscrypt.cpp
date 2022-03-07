@@ -56,6 +56,11 @@ int scanhash_neoscrypt(bool stratum, int thr_id, uint32_t *pdata,
 			intensity = 256 * 64 * 5;
 			use_tpruvot = true;
 		}
+		else if (strstr(props.name, "3070"))
+		{
+			intensity = 256 * 64 * 5;
+			use_tpruvot = true; // benchmark needed
+		}
 		else if (strstr(props.name, "RTX 3"))
 		{
 			intensity = 256 * 64 * 32;

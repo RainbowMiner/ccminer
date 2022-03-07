@@ -2950,6 +2950,7 @@ int main(int argc, char *argv[])
 	printf("\nBased on pooler cpuminer 2.3.2 and the tpruvot@github fork\n");
 	printf("CUDA support by Christian Buchner, Christian H. and DJM34\n");
 	printf("Includes optimizations and additions implemented by sp-hash, tpruvot, tsiv and others.\n\n");
+	printf("** RainbowMiner edition https://rbminer.net **\n\n");
 
 #ifdef _MSC_VER
 	printf("Compiled with Visual Studio %d ", msver());
