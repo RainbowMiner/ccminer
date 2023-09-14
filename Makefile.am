@@ -93,6 +93,8 @@ nvcc_ARCH += -gencode=arch=compute_70,code=sm_70
 nvcc_ARCH += -gencode=arch=compute_75,code=sm_75
 nvcc_ARCH += -gencode=arch=compute_80,code=sm_80
 nvcc_ARCH += -gencode=arch=compute_86,code=sm_86
+nvcc_ARCH += -gencode=arch=compute_87,code=sm_87
+nvcc_ARCH += -gencode=arch=compute_89,code=sm_89
 
 nvcc_FLAGS = $(nvcc_ARCH) @CUDA_INCLUDES@ -I. @CUDA_CFLAGS@
 nvcc_FLAGS += $(JANSSON_INCLUDES)
@@ -139,7 +141,7 @@ skein.o: skein.cu
 	$(NVCC) $(nvcc_FLAGS) --maxrregcount=64 -o $@ -c $<
 
 neoscrypt/cuda_neoscrypt.o: neoscrypt/cuda_neoscrypt.cu
-	$(NVCC) -gencode=arch=compute_61,code=sm_61 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_52,code=sm_52 -gencode=arch=compute_70,code=sm_70 -gencode=arch=compute_75,code=sm_75 -gencode=arch=compute_86,code=sm_86 @CUDA_INCLUDES@ -I. @CUDA_CFLAGS@ -o $@ -c $<
+	$(NVCC) -gencode=arch=compute_61,code=sm_61 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_52,code=sm_52 -gencode=arch=compute_70,code=sm_70 -gencode=arch=compute_75,code=sm_75 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_87,code=sm_87 -gencode=arch=compute_89,code=sm_89 @CUDA_INCLUDES@ -I. @CUDA_CFLAGS@ -o $@ -c $<
 
 neoscrypt/cuda_neoscrypt_tpruvot.o: neoscrypt/cuda_neoscrypt_tpruvot.cu
-	$(NVCC) -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_61,code=sm_61 -gencode=arch=compute_70,code=sm_70 -gencode=arch=compute_75,code=sm_75 -gencode=arch=compute_86,code=sm_86 @CUDA_INCLUDES@ -I. $(JANSSON_INCLUDES) @CUDA_CFLAGS@ -o $@ -c $<
+	$(NVCC) -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_61,code=sm_61 -gencode=arch=compute_70,code=sm_70 -gencode=arch=compute_75,code=sm_75 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_87,code=sm_87 -gencode=arch=compute_89,code=sm_89 @CUDA_INCLUDES@ -I. $(JANSSON_INCLUDES) @CUDA_CFLAGS@ -o $@ -c $<
