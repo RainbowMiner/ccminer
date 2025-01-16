@@ -18,6 +18,7 @@
 #define rotate ROTL32
 #define rotateR ROTR32
 #define rotateL ROTL32
+#define kWordSize 8U
 
 typedef uint48 uint4x2;
 
@@ -771,7 +772,7 @@ void fastkdf256_v1(const uint32_t thread, const uint32_t nonce, uint32_t* const 
 	((uint32_t*)output)[59] ^= nonce;
 
 	for(int i = 0; i<8; i++)
-		(Input + 8U * thread)[i] = output[i];
+		(Input + kWordSize * thread)[i] = output[i];
 }
 #endif
 
@@ -971,7 +972,7 @@ void fastkdf256_v2(const uint32_t thread, const uint32_t nonce, uint32_t* const 
 	((uint32_t*)output)[19] ^= nonce;
 	((uint32_t*)output)[39] ^= nonce;
 	((uint32_t*)output)[59] ^= nonce;
-	((ulonglong16 *)(Input + 8U * thread))[0] = ((ulonglong16*)output)[0];
+	((ulonglong16 *)(Input + kWordSize * thread))[0] = ((ulonglong16*)output)[0];
 }
 #endif
 
@@ -1303,23 +1304,31 @@ void neoscrypt_gpu_hash_chacha1()
 {
 	const uint32_t thread = (blockDim.y * blockIdx.x + threadIdx.y);
 	const uint32_t threads = (gridDim.x * blockDim.y);
-	const uint32_t shiftTr = 8U * thread;
+	const uint32_t shiftTr = kWordSize * thread;
 	if(thread >= threads)
 		return;
 
+	int i = 0; // avoids memory misallineaments and crashes on my 3090
 	uint4 X[4];
-	for(int i = 0; i < 4; i++)
+
+	const uint32_t TempIndexX = threadIdx.x;
+	const uint32_t TempIndexY = 4 + threadIdx.x;
+	const uint32_t TempIndexZ = 8 + threadIdx.x;
+	const uint32_t TempIndexW = 12 + threadIdx.x;
+
+	for(i = 0; i < 4; i++)
 	{
-		X[i].x = __ldg((uint32_t*)&(Input + shiftTr)[i * 2] + 0 * 4 + threadIdx.x);
-		X[i].y = __ldg((uint32_t*)&(Input + shiftTr)[i * 2] + 1 * 4 + threadIdx.x);
-		X[i].z = __ldg((uint32_t*)&(Input + shiftTr)[i * 2] + 2 * 4 + threadIdx.x);
-		X[i].w = __ldg((uint32_t*)&(Input + shiftTr)[i * 2] + 3 * 4 + threadIdx.x);
+		uint32_t* TempA = (uint32_t*)&(Input + shiftTr)[i * 2];
+		X[i].x = __ldg(TempA + TempIndexX);
+		X[i].y = __ldg(TempA + TempIndexY);
+		X[i].z = __ldg(TempA + TempIndexZ);
+		X[i].w = __ldg(TempA + TempIndexW);
 	}
 
 #pragma unroll 1
-	for(int i = 0; i < 128; i++)
+	for(i = 0; i < 128; i++)
 	{
-		ptrdiff_t offset = 8U * (thread + threads * i);
+		ptrdiff_t offset = kWordSize * (thread + threads * i);
 		for(int j = 0; j < 4; j++)
 			((uint4*)(W + offset))[j * 4 + threadIdx.x] = X[j];
 		neoscrypt_chacha(X);
@@ -1328,19 +1337,21 @@ void neoscrypt_gpu_hash_chacha1()
 #pragma unroll 1
 	for(int t = 0; t < 128; t++)
 	{
-		ptrdiff_t offset = 8U * (thread + threads * (WarpShuffle(X[3].x, 0, 4) & 0x7F));
+		int warpShuffleIndex = WarpShuffle(X[3].x, 0, 4) & 0x7F;
+		ptrdiff_t offset = kWordSize * (thread + threads * warpShuffleIndex);
 		for(int j = 0; j < 4; j++)
 			X[j] ^= ((uint4*)(W + offset))[j * 4 + threadIdx.x];
 		neoscrypt_chacha(X);
 	}
-
+	__syncthreads();
 #pragma unroll
-	for(int i = 0; i < 4; i++)
+	for(i = 0; i < 4; i++)
 	{
-		*((uint32_t*)&(Tr + shiftTr)[i * 2] + 0 * 4 + threadIdx.x) = X[i].x;
-		*((uint32_t*)&(Tr + shiftTr)[i * 2] + 1 * 4 + threadIdx.x) = X[i].y;
-		*((uint32_t*)&(Tr + shiftTr)[i * 2] + 2 * 4 + threadIdx.x) = X[i].z;
-		*((uint32_t*)&(Tr + shiftTr)[i * 2] + 3 * 4 + threadIdx.x) = X[i].w;
+		uint32_t* TempB = (uint32_t*)&(Tr + shiftTr)[i * 2];
+		*(TempB + TempIndexX) = X[i].x;
+		*(TempB + TempIndexY) = X[i].y;
+		*(TempB + TempIndexZ) = X[i].z;
+		*(TempB + TempIndexW) = X[i].w;
 	}
 }
 
@@ -1350,45 +1361,56 @@ void neoscrypt_gpu_hash_salsa1()
 {
 	const uint32_t thread = (blockDim.y * blockIdx.x + threadIdx.y);
 	const uint32_t threads = (gridDim.x * blockDim.y);
-	const uint32_t shiftTr = 8U * thread;
+	const uint32_t shiftTr = kWordSize * thread;
 	if(thread >= threads)
 		return;
-
+	int i = 0; // avoids memory misallineaments and crashes on my 3090
 	uint4 Z[4];
-	for(int i = 0; i < 4; i++)
+	const uint32_t TempIndexX = (threadIdx.x & 3) * 4 + threadIdx.x;
+	const uint32_t TempIndexY = ((1 + threadIdx.x) & 3) * 4 + threadIdx.x;
+	const uint32_t TempIndexZ = ((2 + threadIdx.x) & 3) * 4 + threadIdx.x;
+	const uint32_t TempIndexW = ((3 + threadIdx.x) & 3) * 4 + threadIdx.x;
+
+	for(i = 0; i < 4; i++)
 	{
-		Z[i].x = __ldg((uint32_t*)&(Input + shiftTr)[i * 2] + ((0 + threadIdx.x) & 3) * 4 + threadIdx.x);
-		Z[i].y = __ldg((uint32_t*)&(Input + shiftTr)[i * 2] + ((1 + threadIdx.x) & 3) * 4 + threadIdx.x);
-		Z[i].z = __ldg((uint32_t*)&(Input + shiftTr)[i * 2] + ((2 + threadIdx.x) & 3) * 4 + threadIdx.x);
-		Z[i].w = __ldg((uint32_t*)&(Input + shiftTr)[i * 2] + ((3 + threadIdx.x) & 3) * 4 + threadIdx.x);
+		uint32_t* TempA = (uint32_t*)&(Input + shiftTr)[i * 2];
+		Z[i].x = __ldg(TempA + TempIndexX);
+		Z[i].y = __ldg(TempA + TempIndexY);
+		Z[i].z = __ldg(TempA + TempIndexZ);
+		Z[i].w = __ldg(TempA + TempIndexW);
 	}
 
 #pragma unroll 1
-	for(int i = 0; i < 128; i++)
+	for(i = 0; i < 128; i++)
 	{
-		ptrdiff_t offset = 8U * (thread + threads * i);
+		ptrdiff_t offset = kWordSize * (thread + threads * i);
 		for(int j = 0; j < 4; j++)
 			((uint4*)(W + offset))[j * 4 + threadIdx.x] = Z[j];
 		neoscrypt_salsa(Z);
 	}
 
 #pragma unroll 1
-	for(int t = 0; t < 128; t++)
+	for(i = 0; i < 128; i++)
 	{
-		uint32_t offset = 8U * (thread + threads * (WarpShuffle(Z[3].x, 0, 4) & 0x7F));
+		int warpShuffleIndex = WarpShuffle(Z[3].x, 0, 4) & 0x7F;
+		uint32_t offset = kWordSize * (thread + threads * warpShuffleIndex);
 		for(int j = 0; j < 4; j++)
 			Z[j] ^= ((uint4*)(W + offset))[j * 4 + threadIdx.x];
 		neoscrypt_salsa(Z);
 	}
+	__syncthreads();
+
 #pragma unroll
-	for(int i = 0; i < 4; i++)
+	for(i = 0; i < 4; i++)
 	{
-		*((uint32_t*)&(Tr2 + shiftTr)[i * 2] + ((0 + threadIdx.x) & 3) * 4 + threadIdx.x) = Z[i].x;
-		*((uint32_t*)&(Tr2 + shiftTr)[i * 2] + ((1 + threadIdx.x) & 3) * 4 + threadIdx.x) = Z[i].y;
-		*((uint32_t*)&(Tr2 + shiftTr)[i * 2] + ((2 + threadIdx.x) & 3) * 4 + threadIdx.x) = Z[i].z;
-		*((uint32_t*)&(Tr2 + shiftTr)[i * 2] + ((3 + threadIdx.x) & 3) * 4 + threadIdx.x) = Z[i].w;
+		uint32_t* TempB = (uint32_t*)&(Tr2 + shiftTr)[i * 2];
+		*(TempB + TempIndexX) = Z[i].x;
+		*(TempB + TempIndexY) = Z[i].y;
+		*(TempB + TempIndexZ) = Z[i].z;
+		*(TempB + TempIndexW) = Z[i].w;
 	}
 }
+
 
 __global__
 __launch_bounds__(TPB2, 8)
@@ -1397,7 +1419,7 @@ void neoscrypt_gpu_hash_ending(uint32_t threads, const int stratum, const uint32
 	__shared__ uint32_t s_data[64 * TPB2];
 
 	const uint32_t thread = (blockDim.x * blockIdx.x + threadIdx.x);
-	const uint32_t shiftTr = thread * 8U;
+	const uint32_t shiftTr = thread * kWordSize;
 	const uint32_t nonce = startNonce + thread;
 	const uint32_t ZNonce = (stratum) ? cuda_swab32(nonce) : nonce;
 	if(thread >= threads)
